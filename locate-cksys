@@ -1,0 +1,4 @@
+#!/bin/ksh
+# Back-compat shim: cksys and friends live in locate-lib.
+# Prefer: . "${0%/*}/locate-lib"  or  . "${0%/*}/locatelib/locate-lib"
+. "${0%/*}/locate-lib"

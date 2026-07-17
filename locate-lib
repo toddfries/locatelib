@@ -1,0 +1,170 @@
+#!/bin/ksh
+# locate-lib — common bits for *locate / mindex builders (sourced, not executed).
+#
+# Usage from a sibling script in this directory:
+#	. "${0%/*}/locate-lib"
+#
+# Expects ksh. Safe to source once; functions are redefined.
+
+# ---------------------------------------------------------------------------
+# Identity / paths
+# ---------------------------------------------------------------------------
+
+# Set me, host, PID, defaults for build/verbose/datadir/dbname.
+# Call after $0 is the real tool name (gitfmtlocate rewrites me later).
+locate_setup_me() {
+	me=$0
+	me=${me##*/}
+	host=$(hostname -s)
+	PID=$$
+	build=${build:-0}
+	verbose=${verbose:-0}
+	datadir=${datadir:-$HOME/var/db}
+	dbname=${dbname:-${me}.database}
+}
+
+# TMPDIR: /$host.a/tmp → $HOME/tmp → /tmp
+locate_setup_tmpdir() {
+	export TMPDIR=/${host}.a/tmp
+	[ -d "$TMPDIR" ] || TMPDIR=$HOME/tmp
+	[ -d "$TMPDIR" ] || TMPDIR=/tmp
+	export TMPDIR
+}
+
+# Large C-locale sort. Args: [physmem_divisor [max_MiB]]
+# Defaults: /3 of physmem, cap 1024 MiB (matches most builders).
+locate_setup_sort() {
+	local frac=${1:-3}
+	local cap=${2:-1024}
+	sortmem=$(echo "$(sysctl -n hw.physmem)/1024/1024/${frac}" | bc)
+	if [ -z "$sortmem" ] || [ "$sortmem" -lt 1 ]; then
+		sortmem=64
+	fi
+	if [ "$sortmem" -gt "$cap" ]; then
+		sortmem=$cap
+	fi
+	export sort="env LC_ALL=C sort -H -S ${sortmem}M -T $TMPDIR"
+}
+
+# Work temp dir + trap. Optional $1 = apichangedate (unix time) for $td/apichangedate.
+locate_setup_td() {
+	td=$(mktemp -d "$TMPDIR/.${me}.XXXXXXXXXXXXXXXXXXXX")
+	trap 'locate_cleanup' 0 1 2 3 13 15
+	if [ -n "${1:-}" ]; then
+		touch -t "$(date -r "$1" +%Y%m%d%H%M)" "$td/apichangedate"
+	fi
+}
+
+# tty → /dev/null when not a tty (progress noise).
+locate_setup_tty() {
+	tty=$(tty 2>&1)
+	case "$tty" in
+	"not a tty") tty=/dev/null;;
+	esac
+}
+
+# Full common bootstrap: me + tmpdir + sort [+ optional apichangedate for td].
+# Args: [sort_frac [sort_cap_mib [apichangedate]]]
+locate_bootstrap() {
+	locate_setup_me
+	locate_setup_tmpdir
+	locate_setup_sort "${1:-3}" "${2:-1024}"
+	if [ -n "${3:-}" ]; then
+		locate_setup_td "$3"
+	else
+		locate_setup_td
+	fi
+}
+
+# ---------------------------------------------------------------------------
+# Cleanup / PIDFILE
+# ---------------------------------------------------------------------------
+
+# Release pidfile (if we hold it) and remove $td / $tmpwrite.
+locate_cleanup() {
+	pidfile_release
+	[ -n "${td:-}" ] && rm -rf "$td"
+	[ -n "${tmpwrite:-}" ] && rm -f "$tmpwrite"
+}
+
+# Silent exit 0 if another ${me} -B is running; else write $HOME/var/run/${me}.pid.
+# Uses ps(1), not top(1). Call only on the build path after flag parse.
+pidfile_acquire() {
+	local opid
+	mkdir -p "$HOME/var/run" || exit 1
+	PIDFILE=$HOME/var/run/${me}.pid
+	if [ -f "$PIDFILE" ]; then
+		opid=$(cat "$PIDFILE" 2>/dev/null)
+		if [ -n "$opid" ] && kill -0 "$opid" 2>/dev/null; then
+			# still alive — backoff silently (same as historical top-based check)
+			exit 0
+		fi
+	fi
+	echo "$$" > "$PIDFILE" || exit 1
+	_locate_pidfile_held=1
+}
+
+pidfile_release() {
+	if [ "${_locate_pidfile_held:-0}" = 1 ] && [ -n "${PIDFILE:-}" ]; then
+		rm -f "$PIDFILE"
+		_locate_pidfile_held=0
+	fi
+}
+
+# ---------------------------------------------------------------------------
+# cksys — pause when unlocked / pause file; exit on shutdown (see myxlock)
+# ---------------------------------------------------------------------------
+
+cksys() {
+	local pause="$HOME/tmp/pause"
+	local shutdown="$HOME/tmp/shutdown"
+	local locked="$HOME/tmp/locked"
+
+	# don't chew cpu when unlocked or pause requested
+	while [ -f "$pause" ] || ! [ -f "$locked" ]; do
+		[ -f "$shutdown" ] && exit 0
+		sleep $(( 5 + RANDOM % 10 ))
+	done
+	[ -f "$shutdown" ] && exit 0
+}
+
+# ---------------------------------------------------------------------------
+# Compression helpers
+# ---------------------------------------------------------------------------
+
+comp() {
+	xz -9e
+}
+decomp() {
+	xz -d
+}
+# alias used by some older scripts
+compress() {
+	xz -9e
+}
+
+# ---------------------------------------------------------------------------
+# Search: multi-db locate over $datadir/${dbname}*
+# ---------------------------------------------------------------------------
+
+# Remaining args passed to locate(1). Exits with last locate status.
+locate_search() {
+	local db rc=1
+	local any=0
+	for db in "$datadir/${dbname}"*; do
+		[ -f "$db" ] || continue
+		any=1
+		locate -d "$db" "$@"
+		rc=$?
+	done
+	if [ any -eq 0 ]; then
+		# no database yet
+		exit 1
+	fi
+	exit $rc
+}
+
+# Single-db search (cloudlocate / ssn / ob / nb style).
+locate_search_one() {
+	exec locate -d "$datadir/$dbname" "$@"
+}
