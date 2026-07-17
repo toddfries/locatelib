@@ -31,8 +31,22 @@ locate_bootstrap 3 1024
 pidfile_acquire   # on -B only
 ```
 
-## Remote
+## cksys / xlock
+
+By default `cksys` waits until `$HOME/tmp/locked` exists (see `myxlock`) and
+is not paused. For testing while unlocked:
+
+```sh
+LOCATE_CKSYS_SKIP=1 mindex -B
+# or
+LOCATE_NO_CKSYS=1 oblocate -B
+```
+
+`$HOME/tmp/shutdown` still forces a clean exit.
+
+## Remotes
 
 ```
-scm0.fdh.bz:/scm/locatelib.git
+origin  scm0.fdh.bz:/scm/locatelib.git   # internal
+github  git@github.com:toddfries/locatelib.git
 ```

@@ -113,12 +113,24 @@ pidfile_release() {
 
 # ---------------------------------------------------------------------------
 # cksys — pause when unlocked / pause file; exit on shutdown (see myxlock)
+#
+# Override for testing / unattended runs while the session is unlocked:
+#   LOCATE_CKSYS_SKIP=1   (also: yes/true)
+#   LOCATE_NO_CKSYS=1     (alias)
+# Shutdown file is still honored so an emergency stop works.
 # ---------------------------------------------------------------------------
 
 cksys() {
 	local pause="$HOME/tmp/pause"
 	local shutdown="$HOME/tmp/shutdown"
 	local locked="$HOME/tmp/locked"
+
+	case "${LOCATE_CKSYS_SKIP:-${LOCATE_NO_CKSYS:-}}" in
+	1|yes|true|YES|TRUE)
+		[ -f "$shutdown" ] && exit 0
+		return 0
+		;;
+	esac
 
 	# don't chew cpu when unlocked or pause requested
 	while [ -f "$pause" ] || ! [ -f "$locked" ]; do
