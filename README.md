@@ -27,8 +27,13 @@ From a script living next to the submodule directory:
 ```ksh
 . /path/to/locatelib/locate-lib
 locate_bootstrap 3 1024
+# -h) locate_usage "extra note";;
+# search: locate_search "$@"   # multi-db \$datadir/\${dbname}*
 pidfile_acquire   # on -B only
 ```
+
+`locate_search` always globs `$datadir/${dbname}*` (one file or split shards).
+`locate_usage` prints a standard `-B` / search / `-h` blurb; pass extra lines for tool-specific flags.
 
 ## cksys / xlock
 

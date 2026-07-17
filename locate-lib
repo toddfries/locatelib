@@ -156,10 +156,37 @@ compress() {
 }
 
 # ---------------------------------------------------------------------------
+# Usage / -h
+# ---------------------------------------------------------------------------
+#
+# Standard blurb; optional extra lines as arguments (indented for you):
+#	locate_usage "  -a subdir   limit to Mail subdir" "  -n          cache only"
+# Or set locate_usage_extra=$'line1\nline2' before calling.
+locate_usage() {
+	echo "usage: ${me:-$0} -B [tool options]     # rebuild database(s)"
+	echo "       ${me:-$0} [locate options] pattern ...  # search"
+	echo "       ${me:-$0} -h"
+	echo "search uses: \$datadir/\${dbname}*  (multi-db when split)"
+	echo "  datadir=${datadir:-?}  dbname=${dbname:-?}"
+	if [ "$#" -gt 0 ]; then
+		echo "tool options / notes:"
+		local line
+		for line in "$@"; do
+			echo "  $line"
+		done
+	fi
+	if [ -n "${locate_usage_extra:-}" ]; then
+		print -r -- "$locate_usage_extra"
+	fi
+	exit 1
+}
+
+# ---------------------------------------------------------------------------
 # Search: multi-db locate over $datadir/${dbname}*
 # ---------------------------------------------------------------------------
 
 # Remaining args passed to locate(1). Exits with last locate status.
+# Prefer this for all builders — a single file still matches the glob.
 locate_search() {
 	local db rc=1
 	local any=0
@@ -176,7 +203,7 @@ locate_search() {
 	exit $rc
 }
 
-# Single-db search (cloudlocate / ssn / ob / nb style).
+# Historic name; same as locate_search (multi-db when present).
 locate_search_one() {
-	exec locate -d "$datadir/$dbname" "$@"
+	locate_search "$@"
 }
