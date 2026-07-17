@@ -8,7 +8,6 @@ Shared ksh library for Todd’s `*locate` / `mindex` builders and for
 | File | Role |
 |------|------|
 | `locate-lib` | Source this. Bootstrap, TMPDIR, sort, td, **pidfile_**, cksys, search helpers, xz. |
-| `locate-cksys` | Thin back-compat shim that sources `locate-lib`. |
 
 ## Use as a git submodule
 
